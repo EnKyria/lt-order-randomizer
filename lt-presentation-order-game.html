@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LT発表順決定ゲーム</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/FontLoader.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/geometries/TextGeometry.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        #controls { position: absolute; top: 10px; left: 10px; color: #fff; }
+        #result { position: absolute; top: 10px; right: 10px; color: #fff; font-size: 24px; }
+        #announcement { 
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            color: #fff; 
+            font-size: 48px; 
+            font-weight: bold; 
+            display: none; 
+        }
+        #theme-selector { position: absolute; bottom: 10px; left: 10px; }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <input type="text" id="nameInput" placeholder="発表者の名前">
+        <button onclick="addPresenter()">追加</button>
+        <button onclick="startGame()">ゲーム開始</button>
+    </div>
+    <div id="result"></div>
+    <div id="announcement">順番発表</div>
+    <div id="theme-selector">
+        <select onchange="changeTheme(this.value)">
+            <option value="default">デフォルト</option>
+            <option value="spring">春</option>
+            <option value="summer">夏</option>
+            <option value="autumn">秋</option>
+            <option value="winter">冬</option>
+        </select>
+    </div>
+    <script>
+        let scene, camera, renderer, textMeshes = [], presenters = [], spotLights = [], particles, font;
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            camera.position.z = 10;
+
+            const ambientLight = new THREE.AmbientLight(0x404040);
+            scene.add(ambientLight);
+
+            createParticles();
+            loadFont();
+            animate();
+
+            document.getElementById('nameInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    addPresenter();
+                }
+            });
+
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function changeTheme(theme) {
+            switch(theme) {
+                case 'spring':
+                    scene.background = new THREE.Color(0xFFB7C5);
+                    break;
+                case 'summer':
+                    scene.background = new THREE.Color(0x87CEEB);
+                    break;
+                case 'autumn':
+                    scene.background = new THREE.Color(0xD2691E);
+                    break;
+                case 'winter':
+                    scene.background = new THREE.Color(0xE0FFFF);
+                    break;
+                default:
+                    scene.background = new THREE.Color(0x000000);
+            }
+        }
+
+        function createParticles() {
+            const particleCount = 1000;
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+
+            for (let i = 0; i < particleCount; i++) {
+                positions[i * 3] = (Math.random() * 2 - 1) * 10;
+                positions[i * 3 + 1] = (Math.random() * 2 - 1) * 10;
+                positions[i * 3 + 2] = (Math.random() * 2 - 1) * 10;
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            const material = new THREE.PointsMaterial({
+                color: 0xff44ff,
+                size: 0.1,
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+            });
+
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+        }
+
+        function loadFont() {
+            const loader = new THREE.FontLoader();
+            loader.load('fonts/Dela Gothic One_Regular.json', function(loadedFont) {
+                font = loadedFont;
+            });
+        }
+
+        function createSpotlight(position) {
+            const spotlight = new THREE.SpotLight(0xffffff, 2);
+            spotlight.position.copy(position);
+            spotlight.angle = Math.PI / 4;
+            spotlight.penumbra = 0.2;
+            spotlight.decay = 1;
+            spotlight.distance = 20;
+            scene.add(spotlight);
+            return spotlight;
+        }
+
+        function getRainbowColor(t) {
+            const r = Math.sin(t) * 127 + 128;
+            const g = Math.sin(t + 2 * Math.PI / 3) * 127 + 128;
+            const b = Math.sin(t + 4 * Math.PI / 3) * 127 + 128;
+            return new THREE.Color(r/255, g/255, b/255);
+        }
+
+        function createExplosion(position) {
+            const particleCount = 100;
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+
+            for (let i = 0; i < particleCount; i++) {
+                const x = (Math.random() - 0.5) * 2;
+                const y = (Math.random() - 0.5) * 2;
+                const z = (Math.random() - 0.5) * 2;
+                positions[i * 3] = x;
+                positions[i * 3 + 1] = y;
+                positions[i * 3 + 2] = z;
+
+                const color = new THREE.Color(Math.random(), Math.random(), Math.random());
+                colors[i * 3] = color.r;
+                colors[i * 3 + 1] = color.g;
+                colors[i * 3 + 2] = color.b;
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+            const material = new THREE.PointsMaterial({
+                size: 0.1,
+                vertexColors: true,
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+            });
+
+            const explosion = new THREE.Points(geometry, material);
+            explosion.position.copy(position);
+            scene.add(explosion);
+
+            new TWEEN.Tween(explosion.scale)
+                .to({ x: 2, y: 2, z: 2 }, 1000)
+                .easing(TWEEN.Easing.Quadratic.Out)
+                .start();
+
+            new TWEEN.Tween(material)
+                .to({ opacity: 0 }, 1000)
+                .easing(TWEEN.Easing.Quadratic.Out)
+                .onComplete(() => {
+                    scene.remove(explosion);
+                })
+                .start();
+        }
+
+        function addPresenter() {
+            const name = document.getElementById('nameInput').value;
+            if (name && font) {
+                presenters.push(name);
+                document.getElementById('nameInput').value = '';
+                updatePresenterDisplay(name);
+            }
+        }
+
+        function updatePresenterDisplay(name) {
+            const geometry = new THREE.TextGeometry(name, {
+                font: font,
+                size: 0.5,
+                height: 0.1,
+                curveSegments: 12,
+                bevelEnabled: true,
+                bevelThickness: 0.03,
+                bevelSize: 0.02,
+                bevelOffset: 0,
+                bevelSegments: 5
+            });
+
+            const material = new THREE.MeshPhongMaterial({ 
+                color: 0xffffff,
+                specular: 0x555555, 
+                shininess: 30 
+            });
+
+            const textMesh = new THREE.Mesh(geometry, material);
+            const x = (Math.random() * 2 - 1) * (window.innerWidth / window.innerHeight) * 4;
+            const y = (Math.random() * 2 - 1) * 4;
+            const z = Math.random() * 4 - 2;
+            textMesh.position.set(x, y, z);
+            scene.add(textMesh);
+            textMeshes.push(textMesh);
+
+            const spotlight = createSpotlight(new THREE.Vector3(x, y + 2, z + 2));
+            spotLights.push(spotlight);
+
+            textMesh.scale.set(0, 0, 0);
+            new TWEEN.Tween(textMesh.scale)
+                .to({ x: 1, y: 1, z: 1 }, 1000)
+                .easing(TWEEN.Easing.Elastic.Out)
+                .start();
+
+            createExplosion(textMesh.position);
+        }
+
+        function startGame() {
+    if (presenters.length < 2) {
+        alert('少なくとも2人の発表者が必要です。');
+        return;
+    }
+
+    showAnnouncement("順番発表").then(() => {
+        const shuffled = [...presenters].sort(() => Math.random() - 0.5);
+
+        // シャッフルアニメーション
+        const shuffleDuration = 3000; // 3秒間のシャッフル
+        const shuffleSteps = 30; // シャッフルのステップ数
+
+        for (let step = 0; step < shuffleSteps; step++) {
+            setTimeout(() => {
+                textMeshes.forEach((mesh, index) => {
+                    const angle = (Math.PI * 2 * step / shuffleSteps) + (index * Math.PI * 2 / textMeshes.length);
+                    const radius = 5 + Math.sin(step / shuffleSteps * Math.PI) * 2; // 半径を変動させる
+                    
+                    new TWEEN.Tween(mesh.position)
+                        .to({
+                            x: Math.cos(angle) * radius,
+                            y: Math.sin(angle) * radius,
+                            z: Math.sin(step / shuffleSteps * Math.PI * 4) * 2 // Z軸方向にも動きを加える
+                        }, shuffleDuration / shuffleSteps)
+                        .easing(TWEEN.Easing.Quadratic.InOut)
+                        .start();
+
+                    // 回転も加える
+                    new TWEEN.Tween(mesh.rotation)
+                        .to({
+                            x: Math.random() * Math.PI,
+                            y: Math.random() * Math.PI,
+                            z: Math.random() * Math.PI
+                        }, shuffleDuration / shuffleSteps)
+                        .easing(TWEEN.Easing.Quadratic.InOut)
+                        .start();
+                });
+            }, (shuffleDuration / shuffleSteps) * step);
+        }
+
+        // シャッフル後の整列アニメーション
+        setTimeout(() => {
+            document.getElementById('result').innerHTML = '';
+
+            shuffled.forEach((name, index) => {
+                setTimeout(() => {
+                    const mesh = textMeshes[presenters.indexOf(name)];
+                    
+                    new TWEEN.Tween(mesh.position)
+                        .to({ x: 0, y: 2 - index, z: 2 }, 1500)
+                        .easing(TWEEN.Easing.Elastic.Out)
+                        .start();
+
+                    new TWEEN.Tween(mesh.rotation)
+                        .to({ x: 0, y: 0, z: 0 }, 1500)
+                        .easing(TWEEN.Easing.Elastic.Out)
+                        .start();
+
+                    document.getElementById('result').innerHTML += `${index + 1}. ${name}<br>`;
+                }, index * 500);
+            });
+
+            setTimeout(startFireworks, shuffled.length * 500 + 1500);
+        }, shuffleDuration + 500);
+    });
+}
+        function showAnnouncement(text) {
+            return new Promise((resolve) => {
+                const announcement = document.getElementById('announcement');
+                announcement.style.display = 'block';
+                announcement.innerHTML = '';
+
+                let charIndex = 0;
+                const interval = setInterval(() => {
+                    announcement.innerHTML += text[charIndex];
+                    charIndex++;
+                    if (charIndex === text.length) {
+                        clearInterval(interval);
+                        setTimeout(() => {
+                            announcement.style.display = 'none';
+                            resolve();
+                        }, 1000);
+                    }
+                }, 200);
+            });
+        }
+
+        function startFireworks() {
+            const fireworkInterval = setInterval(() => {
+                createFirework();
+                if (fireworks.length > 10) {
+                    clearInterval(fireworkInterval);
+                }
+            }, 300);
+        }
+
+        function createFirework() {
+            const geometry = new THREE.BufferGeometry();
+            const particles = 100;
+            const positions = new Float32Array(particles * 3);
+            const colors = new Float32Array(particles * 3);
+            const sizes = new Float32Array(particles);
+
+            const color = new THREE.Color();
+            color.setHSL(Math.random(), 1, 0.5);
+
+            for (let i = 0; i < particles; i++) {
+                positions[i * 3] = (Math.random() - 0.5) * 0.1;
+                positions[i * 3 + 1] = (Math.random() - 0.5) * 0.1;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * 0.1;
+
+                colors[i * 3] = color.r;
+                colors[i * 3 + 1] = color.g;
+                colors[i * 3 + 2] = color.b;
+
+                sizes[i] = Math.random() * 0.1 + 0.05;
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+            const material = new THREE.PointsMaterial({
+                size: 0.1,
+                vertexColors: true,
+                blending: THREE.AdditiveBlending,
+                transparent: true,
+            });
+
+            const firework = new THREE.Points(geometry, material);
+            firework.position.set(
+                (Math.random() - 0.5) * 10,
+                Math.random() * 5 + 5,
+                Math.random() * 5 - 2.5
+            );
+            scene.add(firework);
+
+            new TWEEN.Tween(firework.scale)
+                .to({ x: 20, y: 20, z: 20 }, 1000)
+                .easing(TWEEN.Easing.Cubic.Out)
+                .start();
+
+            new TWEEN.Tween(material)
+                .to({ opacity: 0 }, 1000)
+                .delay(500)
+                .easing(TWEEN.Easing.Quadratic.In)
+                .onComplete(() => {
+                      scene.remove(firework);
+                    const index = fireworks.indexOf(firework);
+                    if (index > -1) {
+                        fireworks.splice(index, 1);
+                    }
+                })
+                .start();
+
+            fireworks.push(firework);
+        }
+
+        function animate(time) {
+            requestAnimationFrame(animate);
+            TWEEN.update(time);
+            
+            textMeshes.forEach((mesh, index) => {
+                mesh.rotation.y = Math.sin(time * 0.001 + index) * 0.1;
+                mesh.position.y += Math.sin(time * 0.002 + index) * 0.001;
+                
+                mesh.material.color = getRainbowColor(time * 0.001 + index);
+            });
+
+            particles.rotation.y += 0.001;
+
+            fireworks.forEach(firework => {
+                firework.rotation.y += 0.01;
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        let fireworks = [];
+
+        init();
+    </script>
+</body>
+</html>
